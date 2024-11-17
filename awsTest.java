@@ -53,7 +53,7 @@ public class awsTest {
 		}
 		ec2 = AmazonEC2ClientBuilder.standard()
 			.withCredentials(credentialsProvider)
-			.withRegion("us-east-1")	/* check the region at AWS console */
+			.withRegion("ap-southeast-2")	/* check the region at AWS console */
 			.build();
 	}
 
