@@ -35,6 +35,14 @@ import com.amazonaws.services.ec2.model.DescribeImagesResult;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.Filter;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.IOException;
+import com.amazonaws.SdkClientException;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
 public class awsTest {
 
 	static AmazonEC2      ec2;
@@ -56,7 +64,15 @@ public class awsTest {
 			.withRegion("ap-southeast-2")	/* check the region at AWS console */
 			.build();
 	}
-
+	
+	// EC2 요금표 (샘플 요금, 실제 요금은 AWS 공식 문서를 참조해야 함)
+    	private static final Map<String, Double> instanceHourlyRates = new HashMap<String, Double>() {{
+		put("t2.micro", 0.0116); // USD/hour
+		put("t2.small", 0.023);  // USD/hour
+		put("t2.medium", 0.0464);
+		// 필요한 인스턴스 유형과 요금을 추가하세요.
+    	}};
+	
 	public static void main(String[] args) throws Exception {
 
 		init();
@@ -76,6 +92,7 @@ public class awsTest {
 			System.out.println("  3. start instance               4. available regions      ");
 			System.out.println("  5. stop instance                6. create instance        ");
 			System.out.println("  7. reboot instance              8. list images            ");
+			System.out.println("  9. condor_status               10. costAnalyze            ");
 			System.out.println("                                 99. quit                   ");
 			System.out.println("------------------------------------------------------------");
 			
@@ -144,7 +161,14 @@ public class awsTest {
 			case 8: 
 				listImages();
 				break;
-
+			case 9: 
+				condorStatus();
+				break;	
+			
+			case 10: 
+				costAnalyze();
+				break;
+				
 			case 99: 
 				System.out.println("bye!");
 				menu.close();
@@ -331,7 +355,7 @@ public class awsTest {
 		DescribeImagesRequest request = new DescribeImagesRequest();
 		ProfileCredentialsProvider credentialsProvider = new ProfileCredentialsProvider();
 		
-		request.getFilters().add(new Filter().withName("name").withValues("htcondor-slave-image"));
+		request.getFilters().add(new Filter().withName("owner-id").withValues("676206900017"));
 		request.setRequestCredentialsProvider(credentialsProvider);
 		
 		DescribeImagesResult results = ec2.describeImages(request);
@@ -342,5 +366,82 @@ public class awsTest {
 		}
 		
 	}
+	
+	
+	public static void condorStatus() {
+        System.out.println("Executing condor_status command...");
+        
+        // condor_status 명령어를 실행
+        ProcessBuilder processBuilder = new ProcessBuilder();
+        processBuilder.command("bash", "-c", "condor_status");
+
+        try {
+            // 프로세스 실행
+            Process process = processBuilder.start();
+
+            // 명령어 출력 결과를 읽기
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            StringBuilder output = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+
+            // 프로세스 종료 후 상태 확인
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                System.out.println("condor_status command executed successfully.");
+                System.out.println("Output:");
+                System.out.println(output.toString());
+            } else {
+                System.err.println("condor_status command failed with exit code: " + exitCode);
+            }
+
+        } catch (IOException | InterruptedException e) {
+            System.err.println("An error occurred while executing condor_status: " + e.getMessage());
+        	}
+    	}
+    	
+	// 간단한 비용 분석 기능
+	public static void costAnalyze() {
+        System.out.println("Analyzing EC2 instance costs...");
+
+        try {
+            DescribeInstancesRequest request = new DescribeInstancesRequest();
+            DescribeInstancesResult result = ec2.describeInstances(request);
+
+            double totalCost = 0.0;
+            int totalInstances = 0;
+
+            for (Reservation reservation : result.getReservations()) {
+                List<Instance> instances = reservation.getInstances();
+                for (Instance instance : instances) {
+                    String instanceId = instance.getInstanceId();
+                    String instanceType = instance.getInstanceType();
+                    String state = instance.getState().getName();
+
+                    if (!state.equals("running")) {
+                        continue; // 실행 중인 인스턴스만 계산
+                    }
+
+                    totalInstances++;
+                    double hourlyRate = instanceHourlyRates.getOrDefault(instanceType, 0.0);
+                    totalCost += hourlyRate;
+
+                    System.out.printf("Instance ID: %s, Type: %s, Hourly Rate: $%.4f\n",
+                            instanceId, instanceType, hourlyRate);
+                }
+            }
+
+            System.out.printf("Total running instances: %d\n", totalInstances);
+            System.out.printf("Estimated hourly cost: $%.4f\n", totalCost);
+
+        } catch (AmazonServiceException e) {
+            System.err.println("AWS service error: " + e.getMessage());
+        } catch (SdkClientException e) {
+            System.err.println("AWS SDK client error: " + e.getMessage());
+        }
+    }
+	
 }
 	
