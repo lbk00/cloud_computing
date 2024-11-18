@@ -35,6 +35,7 @@ import com.amazonaws.services.ec2.model.DescribeImagesResult;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.Filter;
 
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.IOException;
@@ -46,7 +47,11 @@ import java.util.Map;
 public class awsTest {
 
 	static AmazonEC2      ec2;
-
+	
+	private static final String HOST = "ec2-54-206-131-120.ap-southeast-2.compute.amazonaws.com";  // EC2 인스턴스 IP
+	private static final String USER = "ec2-user";  // EC2 인스턴스의 사용자 이름
+	private static final String PRIVATE_KEY_PATH = "/home/user/cloud-test.pem";  // EC2 인스턴스의 .pem 파일 경로
+	
 	private static void init() throws Exception {
 
 		ProfileCredentialsProvider credentialsProvider = new ProfileCredentialsProvider();
@@ -65,12 +70,12 @@ public class awsTest {
 			.build();
 	}
 	
-	// EC2 요금표 (샘플 요금, 실제 요금은 AWS 공식 문서를 참조해야 함)
+	// EC2 요금표 (샘플 요금, 실제 요금은 AWS 공식 문서를 참조)
     	private static final Map<String, Double> instanceHourlyRates = new HashMap<String, Double>() {{
 		put("t2.micro", 0.0116); // USD/hour
 		put("t2.small", 0.023);  // USD/hour
 		put("t2.medium", 0.0464);
-		// 필요한 인스턴스 유형과 요금을 추가하세요.
+		// 필요한 인스턴스 유형과 요금을 추가
     	}};
 	
 	public static void main(String[] args) throws Exception {
@@ -368,38 +373,42 @@ public class awsTest {
 	}
 	
 	
+	// condor_status를 실행할 인스턴스의 id를 입력받고, 해당 인스턴스에서 실행?
+	// 현재는 master 인스턴스의 실행 결과만 보여주고있음
 	public static void condorStatus() {
-        System.out.println("Executing condor_status command...");
-        
-        // condor_status 명령어를 실행
-        ProcessBuilder processBuilder = new ProcessBuilder();
-        processBuilder.command("bash", "-c", "condor_status");
+        	try {
+		    // ssh 명령어를 사용하여 EC2에 접속
+		    String command = String.format("ssh -i %s %s@%s condor_status", PRIVATE_KEY_PATH, USER, HOST);
+		    
+		    // ProcessBuilder를 통해 ssh 명령어 실행
+		    ProcessBuilder processBuilder = new ProcessBuilder("bash", "-c", command);
+		    processBuilder.redirectErrorStream(true);
 
-        try {
-            // 프로세스 실행
-            Process process = processBuilder.start();
+		    // 프로세스 실행
+		    Process process = processBuilder.start();
 
-            // 명령어 출력 결과를 읽기
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            StringBuilder output = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
-            }
+		    // 명령어 실행 결과를 읽기
+		    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+		    StringBuilder output = new StringBuilder();
+		    String line;
+		    while ((line = reader.readLine()) != null) {
+		        output.append(line).append("\n");
+		    }
 
-            // 프로세스 종료 후 상태 확인
-            int exitCode = process.waitFor();
-            if (exitCode == 0) {
-                System.out.println("condor_status command executed successfully.");
-                System.out.println("Output:");
-                System.out.println(output.toString());
-            } else {
-                System.err.println("condor_status command failed with exit code: " + exitCode);
-            }
+		    // 프로세스 종료 후 상태 확인
+		    int exitCode = process.waitFor();
+		    if (exitCode == 0) {
+		        System.out.println("Command executed successfully.");
+		        System.out.println("Output:");
+		        System.out.println(output.toString());
+		    } else {
+		        System.err.println("condor_status command failed with exit code: " + exitCode);
+		    }
 
-        } catch (IOException | InterruptedException e) {
-            System.err.println("An error occurred while executing condor_status: " + e.getMessage());
-        	}
+		} catch (Exception e) {
+		    System.err.println("An error occurred while executing condor_status: " + e.getMessage());
+		    e.printStackTrace();
+		}
     	}
     	
 	// 간단한 비용 분석 기능
@@ -442,6 +451,8 @@ public class awsTest {
             System.err.println("AWS SDK client error: " + e.getMessage());
         }
     }
+    
+    // stop 후 start 했을때, 슬레이브 인스턴스에서 자동으로 condor_status 명령어를 통해 연결하는 기능?
 	
 }
 	
