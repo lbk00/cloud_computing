@@ -43,12 +43,14 @@ import com.amazonaws.SdkClientException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import com.amazonaws.services.ec2.model.Tag;
+import com.amazonaws.services.ec2.model.CreateTagsRequest;
 
 public class awsTest {
 
 	static AmazonEC2      ec2;
 	
-	private static final String HOST = "ec2-54-206-131-120.ap-southeast-2.compute.amazonaws.com";  // EC2 인스턴스 IP
+	//private static final String HOST = "ec2-54-206-131-120.ap-southeast-2.compute.amazonaws.com";  // EC2 인스턴스 IP
 	private static final String USER = "ec2-user";  // EC2 인스턴스의 사용자 이름
 	private static final String PRIVATE_KEY_PATH = "/home/user/cloud-test.pem";  // EC2 인스턴스의 .pem 파일 경로
 	
@@ -98,7 +100,7 @@ public class awsTest {
 			System.out.println("  5. stop instance                6. create instance        ");
 			System.out.println("  7. reboot instance              8. list images            ");
 			System.out.println("  9. condor_status               10. costAnalyze            ");
-			System.out.println("                                 99. quit                   ");
+			System.out.println(" 11. name_change                 99. quit                   ");
 			System.out.println("------------------------------------------------------------");
 			
 			System.out.print("Enter an integer: ");
@@ -173,6 +175,9 @@ public class awsTest {
 			case 10: 
 				costAnalyze();
 				break;
+			case 11: 
+				nameChange();
+				break;
 				
 			case 99: 
 				System.out.println("bye!");
@@ -198,6 +203,23 @@ public class awsTest {
 
 			for(Reservation reservation : response.getReservations()) {
 				for(Instance instance : reservation.getInstances()) {
+				/*
+				// 태그에서 Name 찾기
+					String instanceName = null;
+					for (Tag tag : instance.getTags()) {
+					    if ("Name".equals(tag.getKey())) {
+						instanceName = tag.getValue();
+						break;
+					    }
+					}
+
+					// 이름 출력
+					if (instanceName != null) {
+					    System.out.printf(", [name] %s ", instanceName);
+					} else {
+					    System.out.print(", [name] <No Name>");
+					}
+					*/
 					System.out.printf(
 						"[id] %s, " +
 						"[AMI] %s, " +
@@ -373,10 +395,17 @@ public class awsTest {
 	}
 	
 	
-	// condor_status를 실행할 인스턴스의 id를 입력받고, 해당 인스턴스에서 실행?
-	// 현재는 master 인스턴스의 실행 결과만 보여주고있음
+	// condor_status를 실행할 인스턴스의 id를 입력받고, 해당 인스턴스에서 실행
 	public static void condorStatus() {
         	try {
+        		
+        	    // 사용자로부터 인스턴스 ID 입력받기
+		    Scanner scanner = new Scanner(System.in);
+		    System.out.print("Enter instance id: ");
+		    String instanceId = scanner.nextLine();
+		    //DNS 
+		    String HOST = getPublicDns(instanceId);
+		    
 		    // ssh 명령어를 사용하여 EC2에 접속
 		    String command = String.format("ssh -i %s %s@%s condor_status", PRIVATE_KEY_PATH, USER, HOST);
 		    
@@ -410,6 +439,25 @@ public class awsTest {
 		    e.printStackTrace();
 		}
     	}
+    	// DNS 반환
+    	private static String getPublicDns(String instanceId) {
+		try {
+		    DescribeInstancesRequest request = new DescribeInstancesRequest()
+		        .withInstanceIds(instanceId);
+
+		    DescribeInstancesResult result = ec2.describeInstances(request);
+
+		    for (Reservation reservation : result.getReservations()) {
+		        for (Instance instance : reservation.getInstances()) {
+		            return instance.getPublicDnsName(); // 퍼블릭 DNS 반환
+		        }
+		    }
+		} catch (Exception e) {
+		    System.err.println("Error while retrieving public DNS: " + e.getMessage());
+		    e.printStackTrace();
+		}
+		return null;
+   	 }	
     	
 	// 간단한 비용 분석 기능
 	public static void costAnalyze() {
@@ -452,7 +500,36 @@ public class awsTest {
         }
     }
     
-    // stop 후 start 했을때, 슬레이브 인스턴스에서 자동으로 condor_status 명령어를 통해 연결하는 기능?
+    
+    private static void nameChange() {
+        try {
+        	
+            // 사용자로부터 인스턴스 ID 입력
+	    Scanner scanner = new Scanner(System.in);
+	    System.out.print("Enter instance id: ");
+	    String instanceId = scanner.nextLine();
+            
+            // 사용자로부터 인스턴스 name 입력
+	    System.out.print("Enter name to change : ");
+	    String newName = scanner.nextLine();
+            // 태그 생성
+            Tag nameTag = new Tag()
+                .withKey("Name")
+                .withValue(newName);
+
+            // 태그를 인스턴스에 적용
+            CreateTagsRequest request = new CreateTagsRequest()
+                .withResources(instanceId) // 인스턴스 ID를 지정
+                .withTags(nameTag);
+
+            ec2.createTags(request);
+            System.out.println("The instance " + instanceId + " has been renamed to: " + newName);
+
+        } catch (Exception e) {
+            System.err.println("Failed to rename the instance: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
 	
 }
 	
