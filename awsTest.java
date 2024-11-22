@@ -50,9 +50,7 @@ public class awsTest {
 
 	static AmazonEC2      ec2;
 	
-	//private static final String HOST = "ec2-54-206-131-120.ap-southeast-2.compute.amazonaws.com";  // EC2 인스턴스 IP
-	private static final String USER = "ec2-user";  // EC2 인스턴스의 사용자 이름
-	private static final String PRIVATE_KEY_PATH = "/home/user/cloud-test.pem";  // EC2 인스턴스의 .pem 파일 경로
+	private static final String PRIVATE_KEY = "/home/user/cloud-test.pem";  //EC2 인스턴스의 .pem 파일 경로 ( private_key )
 	
 	private static void init() throws Exception {
 
@@ -99,8 +97,9 @@ public class awsTest {
 			System.out.println("  3. start instance               4. available regions      ");
 			System.out.println("  5. stop instance                6. create instance        ");
 			System.out.println("  7. reboot instance              8. list images            ");
-			System.out.println("  9. condor_status               10. costAnalyze            ");
-			System.out.println(" 11. name_change                 99. quit                   ");
+			System.out.println("  9. condor_status               99. quit                   ");
+			//System.out.println("  9. condor_status               10. name_change           ");
+			//System.out.println(" 11. costAnalyze                 99. quit                   ");
 			System.out.println("------------------------------------------------------------");
 			
 			System.out.print("Enter an integer: ");
@@ -171,12 +170,13 @@ public class awsTest {
 			case 9: 
 				condorStatus();
 				break;	
-			
+				
 			case 10: 
-				costAnalyze();
-				break;
-			case 11: 
 				nameChange();
+				break;
+				
+			case 11: 
+				costAnalyze();
 				break;
 				
 			case 99: 
@@ -402,58 +402,53 @@ public class awsTest {
         	    // 사용자로부터 인스턴스 ID 입력받기
 		    Scanner scanner = new Scanner(System.in);
 		    System.out.print("Enter instance id: ");
-		    String instanceId = scanner.nextLine();
+		    String id = scanner.nextLine();
 		    //DNS 
-		    String HOST = getPublicDns(instanceId);
+		    String HOST = get_DNS(id);
 		    
 		    // ssh 명령어를 사용하여 EC2에 접속
-		    String command = String.format("ssh -i %s %s@%s condor_status", PRIVATE_KEY_PATH, USER, HOST);
+		    // ssh -i "cloud-test.pem" ec2-user@ec2-3-25-120-116.ap-southeast-2.compute.amazonaws.com 형식
+		    String command = String.format("ssh -i %s ec2-user@%s condor_status", PRIVATE_KEY, HOST);
 		    
 		    // ProcessBuilder를 통해 ssh 명령어 실행
 		    ProcessBuilder processBuilder = new ProcessBuilder("bash", "-c", command);
 		    processBuilder.redirectErrorStream(true);
-
-		    // 프로세스 실행
 		    Process process = processBuilder.start();
 
 		    // 명령어 실행 결과를 읽기
 		    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-		    StringBuilder output = new StringBuilder();
-		    String line;
-		    while ((line = reader.readLine()) != null) {
-		        output.append(line).append("\n");
+		    StringBuilder result = new StringBuilder();
+		    String result_line;
+		    while ((result_line = reader.readLine()) != null) {
+		        result.append(result_line).append("\n");
 		    }
-
 		    // 프로세스 종료 후 상태 확인
 		    int exitCode = process.waitFor();
 		    if (exitCode == 0) {
-		        System.out.println("Command executed successfully.");
-		        System.out.println("Output:");
-		        System.out.println(output.toString());
+		        System.out.println("--- condor_status 수행 결과 ---");
+		        System.out.println(result.toString());
 		    } else {
-		        System.err.println("condor_status command failed with exit code: " + exitCode);
+		        System.err.println("condor_status failed " + exitCode);
 		    }
 
 		} catch (Exception e) {
-		    System.err.println("An error occurred while executing condor_status: " + e.getMessage());
+		    System.err.println("Error : " + e.getMessage());
 		    e.printStackTrace();
 		}
     	}
     	// DNS 반환
-    	private static String getPublicDns(String instanceId) {
+    	private static String get_DNS(String id) {
 		try {
 		    DescribeInstancesRequest request = new DescribeInstancesRequest()
-		        .withInstanceIds(instanceId);
-
+		        .withInstanceIds(id);
 		    DescribeInstancesResult result = ec2.describeInstances(request);
-
 		    for (Reservation reservation : result.getReservations()) {
 		        for (Instance instance : reservation.getInstances()) {
-		            return instance.getPublicDnsName(); // 퍼블릭 DNS 반환
+		            return instance.getPublicDnsName(); // ssh 접속에 필요한 퍼블릭 DNS 반환
 		        }
 		    }
 		} catch (Exception e) {
-		    System.err.println("Error while retrieving public DNS: " + e.getMessage());
+		    System.err.println("Error : " + e.getMessage());
 		    e.printStackTrace();
 		}
 		return null;
