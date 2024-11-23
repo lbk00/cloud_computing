@@ -97,9 +97,8 @@ public class awsTest {
 			System.out.println("  3. start instance               4. available regions      ");
 			System.out.println("  5. stop instance                6. create instance        ");
 			System.out.println("  7. reboot instance              8. list images            ");
-			System.out.println("  9. condor_status               99. quit                   ");
-			//System.out.println("  9. condor_status               10. name_change           ");
-			//System.out.println(" 11. costAnalyze                 99. quit                   ");
+			System.out.println("  9. condor_status               10. name_change            ");
+			System.out.println(" 11. cost_analyze                99. quit                    ");
 			System.out.println("------------------------------------------------------------");
 			
 			System.out.print("Enter an integer: ");
@@ -203,23 +202,23 @@ public class awsTest {
 
 			for(Reservation reservation : response.getReservations()) {
 				for(Instance instance : reservation.getInstances()) {
-				/*
-				// 태그에서 Name 찾기
-					String instanceName = null;
+				
+					// Name태그  찾기
+					String Name = null;
 					for (Tag tag : instance.getTags()) {
 					    if ("Name".equals(tag.getKey())) {
-						instanceName = tag.getValue();
+						Name = tag.getValue();
 						break;
 					    }
 					}
 
-					// 이름 출력
-					if (instanceName != null) {
-					    System.out.printf(", [name] %s ", instanceName);
+					// Name태그  출력
+					if (Name != null) {
+					    System.out.printf("[Name] %s, ", Name);
 					} else {
-					    System.out.print(", [name] <No Name>");
+					    System.out.print("[Name]    , ");
 					}
-					*/
+					
 					System.out.printf(
 						"[id] %s, " +
 						"[AMI] %s, " +
@@ -499,32 +498,35 @@ public class awsTest {
     private static void nameChange() {
         try {
         	
-            // 사용자로부터 인스턴스 ID 입력
+            // 인스턴스 ID 입력
 	    Scanner scanner = new Scanner(System.in);
 	    System.out.print("Enter instance id: ");
-	    String instanceId = scanner.nextLine();
+	    String id = scanner.nextLine();
             
-            // 사용자로부터 인스턴스 name 입력
-	    System.out.print("Enter name to change : ");
-	    String newName = scanner.nextLine();
-            // 태그 생성
-            Tag nameTag = new Tag()
+            // 변경 할 인스턴스 name 입력
+	    System.out.print("Enter name to change: ");
+	    String changed_name = scanner.nextLine();
+	    
+            Tag name = new Tag()
                 .withKey("Name")
-                .withValue(newName);
+                .withValue(changed_name);
 
-            // 태그를 인스턴스에 적용
-            CreateTagsRequest request = new CreateTagsRequest()
-                .withResources(instanceId) // 인스턴스 ID를 지정
-                .withTags(nameTag);
+            // 태그를 인스턴스에 update
+            CreateTagsRequest instance_request = new CreateTagsRequest()
+                .withResources(id) 
+                .withTags(name);
 
-            ec2.createTags(request);
-            System.out.println("The instance " + instanceId + " has been renamed to: " + newName);
+            ec2.createTags(instance_request);
+            System.out.println("Successfully renamed instance to '" + changed_name + "'");
 
         } catch (Exception e) {
-            System.err.println("Failed to rename the instance: " + e.getMessage());
+            System.err.println("Error : " + e.getMessage());
             e.printStackTrace();
         }
     }
+    
+
+
 	
 }
 	
