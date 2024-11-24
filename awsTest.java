@@ -46,9 +46,16 @@ import java.util.Map;
 import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.*;
+
+
 public class awsTest {
 
 	static AmazonEC2      ec2;
+	
 	
 	private static final String PRIVATE_KEY = "/home/user/cloud-test.pem";  //EC2 인스턴스의 .pem 파일 경로 ( private_key )
 	
@@ -70,12 +77,15 @@ public class awsTest {
 			.build();
 	}
 	
-	// EC2 요금표 (샘플 요금, 실제 요금은 AWS 공식 문서를 참조)
-    	private static final Map<String, Double> instanceHourlyRates = new HashMap<String, Double>() {{
-		put("t2.micro", 0.0116); // USD/hour
-		put("t2.small", 0.023);  // USD/hour
-		put("t2.medium", 0.0464);
-		// 필요한 인스턴스 유형과 요금을 추가
+	// EC2 요금표 ( 온디맨드 시간당 요금 )
+    	private static final Map<String, Double> OnDemand_hourlyRates = new HashMap<String, Double>() {{
+		put("t2.nano", 0.0073); // USD/hour
+		put("t2.micro", 0.0146);
+		put("t2.small", 0.0292);  
+		put("t2.medium", 0.0584);
+		put("t2.large", 0.1168);
+		put("t2.xlarge", 0.2336);
+		put("t2.2xlarge", 0.4672);
     	}};
 	
 	public static void main(String[] args) throws Exception {
@@ -98,7 +108,7 @@ public class awsTest {
 			System.out.println("  5. stop instance                6. create instance        ");
 			System.out.println("  7. reboot instance              8. list images            ");
 			System.out.println("  9. condor_status               10. name_change            ");
-			System.out.println(" 11. cost_analyze                99. quit                    ");
+			System.out.println(" 11. cost_estimate               99. quit                    ");
 			System.out.println("------------------------------------------------------------");
 			
 			System.out.print("Enter an integer: ");
@@ -175,7 +185,7 @@ public class awsTest {
 				break;
 				
 			case 11: 
-				costAnalyze();
+				costEstimate();
 				break;
 				
 			case 99: 
@@ -453,80 +463,86 @@ public class awsTest {
 		return null;
    	 }	
     	
-	// 간단한 비용 분석 기능
-	public static void costAnalyze() {
-        System.out.println("Analyzing EC2 instance costs...");
-
-        try {
-            DescribeInstancesRequest request = new DescribeInstancesRequest();
-            DescribeInstancesResult result = ec2.describeInstances(request);
-
-            double totalCost = 0.0;
-            int totalInstances = 0;
-
-            for (Reservation reservation : result.getReservations()) {
-                List<Instance> instances = reservation.getInstances();
-                for (Instance instance : instances) {
-                    String instanceId = instance.getInstanceId();
-                    String instanceType = instance.getInstanceType();
-                    String state = instance.getState().getName();
-
-                    if (!state.equals("running")) {
-                        continue; // 실행 중인 인스턴스만 계산
-                    }
-
-                    totalInstances++;
-                    double hourlyRate = instanceHourlyRates.getOrDefault(instanceType, 0.0);
-                    totalCost += hourlyRate;
-
-                    System.out.printf("Instance ID: %s, Type: %s, Hourly Rate: $%.4f\n",
-                            instanceId, instanceType, hourlyRate);
-                }
-            }
-
-            System.out.printf("Total running instances: %d\n", totalInstances);
-            System.out.printf("Estimated hourly cost: $%.4f\n", totalCost);
-
-        } catch (AmazonServiceException e) {
-            System.err.println("AWS service error: " + e.getMessage());
-        } catch (SdkClientException e) {
-            System.err.println("AWS SDK client error: " + e.getMessage());
-        }
-    }
-    
     
     private static void nameChange() {
         try {
         	
-            // 인스턴스 ID 입력
-	    Scanner scanner = new Scanner(System.in);
-	    System.out.print("Enter instance id: ");
-	    String id = scanner.nextLine();
-            
-            // 변경 할 인스턴스 name 입력
-	    System.out.print("Enter name to change: ");
-	    String changed_name = scanner.nextLine();
+		    // 인스턴스 ID 입력
+		    Scanner scanner = new Scanner(System.in);
+		    System.out.print("Enter instance id: ");
+		    String id = scanner.nextLine();
+		    
+		    // 변경 할 인스턴스 name 입력
+		    System.out.print("Enter name to change: ");
+		    String changed_name = scanner.nextLine();
+		    
+		    Tag name = new Tag()
+		        .withKey("Name")
+		        .withValue(changed_name);
+
+		    // 태그를 인스턴스에 update
+		    CreateTagsRequest instance_request = new CreateTagsRequest()
+		        .withResources(id) 
+		        .withTags(name);
+
+		    ec2.createTags(instance_request);
+		    System.out.println("Successfully renamed instance to '" + changed_name + "'");
+
+		} catch (Exception e) {
+		    System.err.println("Error : " + e.getMessage());
+		    e.printStackTrace();
+		}
+	    }
 	    
-            Tag name = new Tag()
-                .withKey("Name")
-                .withValue(changed_name);
+	
+	//현재 실행중인 인스턴스들의 예상 비용 ( 최대 실행시간을 기준으로 계산 )
+	public static void costEstimate() {
+	    System.out.println("Estimate the cost of running instances...");
 
-            // 태그를 인스턴스에 update
-            CreateTagsRequest instance_request = new CreateTagsRequest()
-                .withResources(id) 
-                .withTags(name);
+	    try {
+		DescribeInstancesRequest request = new DescribeInstancesRequest();
+		DescribeInstancesResult result = ec2.describeInstances(request);
 
-            ec2.createTags(instance_request);
-            System.out.println("Successfully renamed instance to '" + changed_name + "'");
+		double total_estimated_cost = 0.0;
 
-        } catch (Exception e) {
-            System.err.println("Error : " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-    
+		for (Reservation reservation : result.getReservations()) {
+		    List<Instance> instances = reservation.getInstances();
+		    for (Instance instance : instances) {
+		        String id = instance.getInstanceId();
+		        String type = instance.getInstanceType();
+		        String state = instance.getState().getName(); 
+			
+			 if (!state.equals("running")) {
+			    continue;
+			}
+			
+		        double rate_per_hour = OnDemand_hourlyRates.getOrDefault(type, 0.0);
 
+		        // 인스턴스 시작 시간
+		        Date start_time = instance.getLaunchTime();
+		        long running_timeMillis = System.currentTimeMillis() - start_time.getTime();
+		        double running_times = running_timeMillis / (1000.0 * 60 * 60);  
 
+		        // 인스턴스마다 실행 시간에 따라 비용 계산
+		        double estimated_cost = rate_per_hour * running_times;
+		        total_estimated_cost += estimated_cost;
+
+		        System.out.printf(
+		                "[id] %s, [type] %s, [on_demand_cost] $%.4f, [running_time] %.1f hours, [estimated_cost] $%.4f\n",
+		                id, type, rate_per_hour, running_times, estimated_cost);
+		    }
+		}
+		System.out.printf("\n");
+		System.out.printf("Total Estimated Cost = $%.4f\n", total_estimated_cost);
+
+	    } catch (AmazonServiceException e) {
+		System.err.println("AWS service error: " + e.getMessage());
+	    } catch (SdkClientException e) {
+		System.err.println("AWS SDK client error: " + e.getMessage());
+	    }
+	}
+	
+	
 	
 }
 	
